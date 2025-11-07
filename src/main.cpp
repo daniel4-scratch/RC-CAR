@@ -23,6 +23,7 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   pinMode(THROTTLE_PIN, INPUT);
   pinMode(STEERING_PIN, INPUT);
+  pinMode(21, OUTPUT);
   Serial.begin(115200);
 
   // Attach servo/ESC outputs (50 Hz handled by library)
@@ -65,6 +66,7 @@ void loop() {
   if (throttle < 1450) {
     // Reverse → fixed flash rate
     blinkInterval = 200;
+    digitalWrite(21, HIGH);
 
   } else if (throttle > 1550) {
     // Forward → flash faster depending on throttle
@@ -74,6 +76,7 @@ void loop() {
   } else {
     // Brake/neutral → solid light
     digitalWrite(LED_PIN, HIGH);
+      digitalWrite(21, LOW);
     return; // skip blinking logic this frame
   }
 
