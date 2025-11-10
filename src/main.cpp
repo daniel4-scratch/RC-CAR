@@ -76,7 +76,7 @@ void loop() {
   } else {
     // Brake/neutral → solid light
     digitalWrite(LED_PIN, HIGH);
-      digitalWrite(21, LOW);
+    digitalWrite(21, LOW);
     return; // skip blinking logic this frame
   }
 
