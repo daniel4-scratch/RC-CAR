@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Wire.h>
 #include <ESP32Servo.h>
 
 // WiFi
@@ -27,12 +28,14 @@ unsigned int lastSteeringUs = 1500;
 
 
 void setup() {
+  Wire.begin();
+  Serial.begin(115200);
+  Serial.println("Serial test: ESP32-S2 booted");
   pinMode(LED_PIN, OUTPUT);
   pinMode(THROTTLE_PIN, INPUT);
   pinMode(STEERING_PIN, INPUT);
   pinMode(12, OUTPUT);
   pinMode(11, OUTPUT);
-  Serial.begin(115200);
 
   // int servos
   throttleOut.attach(THROTTLE_FORWARD);
