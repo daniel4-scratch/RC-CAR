@@ -25,17 +25,54 @@ Servo steeringOut;
 
 unsigned int lastThrottleUs = 1500;
 unsigned int lastSteeringUs = 1500;
+volatile unsigned int throttleUs = 1500; // updated by ISR
+volatile unsigned int steeringUs = 1500; // updated by ISR
+
+// brake lights (persist between loops, controlled by UDP)
+volatile bool breakLights = true;
+
+// ISR state capture
+volatile unsigned long throttleRiseMicros = 0;
+volatile unsigned long steeringRiseMicros = 0;
+
+// Interrupt Service Routines to measure RC PWM pulse width non-blocking
+void IRAM_ATTR throttleISR() {
+  int level = digitalRead(THROTTLE_PIN);
+  if (level == HIGH) {
+    throttleRiseMicros = micros();
+  } else {
+    unsigned long width = micros() - throttleRiseMicros;
+    if (width >= 800 && width <= 2400) { // sanity bounds
+      throttleUs = (unsigned int)constrain(width, 1000UL, 2000UL);
+    }
+  }
+}
+
+void IRAM_ATTR steeringISR() {
+  int level = digitalRead(STEERING_PIN);
+  if (level == HIGH) {
+    steeringRiseMicros = micros();
+  } else {
+    unsigned long width = micros() - steeringRiseMicros;
+    if (width >= 800 && width <= 2400) {
+      steeringUs = (unsigned int)constrain(width, 1000UL, 2000UL);
+    }
+  }
+}
 
 
 void setup() {
   Wire.begin();
   Serial.begin(115200);
+  delay(1000);
   Serial.println("Serial test: ESP32-S2 booted");
   pinMode(LED_PIN, OUTPUT);
   pinMode(THROTTLE_PIN, INPUT);
   pinMode(STEERING_PIN, INPUT);
-  pinMode(12, OUTPUT);
-  pinMode(11, OUTPUT);
+  pinMode(12, OUTPUT); //break
+  pinMode(11, OUTPUT); //break
+  pinMode(21, OUTPUT); //headlight
+  pinMode(20, OUTPUT); //headlight
 
   // int servos
   throttleOut.attach(THROTTLE_FORWARD);
@@ -43,46 +80,50 @@ void setup() {
   throttleOut.writeMicroseconds(lastThrottleUs);
   steeringOut.writeMicroseconds(lastSteeringUs);
 
-  // init wifi and udp
-  WiFi.softAP(ssid, password);
-  Serial.print("IP address: ");
-  Serial.println(WiFi.softAPIP());
-  udp.begin(port);
-  Serial.print("UDP Port: ");
-  Serial.println(port);
+  // // init wifi and udp
+  // WiFi.softAP(ssid, password);
+  // // Disable WiFi power save to reduce RF subsystem timing perturbations that can jitter servo timing
+  // WiFi.setSleep(false);
+  // Serial.print("IP address: ");
+  // Serial.println(WiFi.softAPIP());
+  // udp.begin(port);
+  // Serial.print("UDP Port: ");
+  // Serial.println(port);
+
+  // Attach interrupts for non-blocking pulse measurement
+  attachInterrupt(THROTTLE_PIN, throttleISR, CHANGE);
+  attachInterrupt(STEERING_PIN, steeringISR, CHANGE);
 }
 
 void loop() {
-  // throttle
-  unsigned long throttle = pulseIn(THROTTLE_PIN, HIGH, 25000);
-  if (throttle == 0) {
-    throttle = lastThrottleUs;
-  }
-  throttle = constrain(throttle, 1000UL, 2000UL);
-  lastThrottleUs = throttle;
+  unsigned int currentThrottle = throttleUs;
+  unsigned int currentSteering = steeringUs;
 
-  // update throttle
-  throttleOut.writeMicroseconds((int)throttle);
-
-  // steering
-  unsigned long steering = pulseIn(STEERING_PIN, HIGH, 25000);
-  if (steering == 0) {
-    steering = lastSteeringUs;
+  // Simple smoothing: only update servos if change exceeds threshold to reduce visible jitter
+  const int jitterThreshold = 3; // microseconds
+  if (abs((int)currentThrottle - (int)lastThrottleUs) > jitterThreshold) {
+    throttleOut.writeMicroseconds((int)currentThrottle);
+    lastThrottleUs = currentThrottle;
   }
-  steering = constrain(steering, 1000UL, 2000UL);
-  lastSteeringUs = steering;
-  // update servo
-  steeringOut.writeMicroseconds((int)steering);
+  if (abs((int)currentSteering - (int)lastSteeringUs) > jitterThreshold) {
+    steeringOut.writeMicroseconds((int)currentSteering);
+    lastSteeringUs = currentSteering;
+  }
 
   // LEDs
-  if (throttle < 1450) {
+  if (currentThrottle < 1450) {
     // reverse
     blinkInterval = 200;
-    digitalWrite(12, HIGH);
-    digitalWrite(11, HIGH);
-  } else if (throttle > 1550) {
+    if(breakLights){
+      digitalWrite(12, HIGH);
+      digitalWrite(11, HIGH);
+    }else{
+      digitalWrite(12, LOW);
+      digitalWrite(11, LOW);
+    }
+  } else if (currentThrottle > 1550) {
     // forward
-    blinkInterval = map(throttle, 1550, 2000, 150, 30);
+    blinkInterval = map(currentThrottle, 1550, 2000, 150, 30);
     blinkInterval = constrain(blinkInterval, 30, 150);
   } else {
     // neutral
@@ -100,13 +141,27 @@ void loop() {
     digitalWrite(LED_PIN, ledState);
   }
 
-  // WiFi
-  int packetSize = udp.parsePacket();
-  if (packetSize){
-    char msg[20];
-    int len = udp.read(msg,20);
-    if (len > 0) msg[len] = 0;
-    Serial.print("Received: ");
-    Serial.println(msg);
+  // // WiFi
+  // int packetSize = udp.parsePacket();
+  // if (packetSize){
+  //   char msg[20];
+  //   int len = udp.read(msg,20);
+  //   if (len > 0) msg[len] = 0;
+  //   Serial.print("Received: ");
+  //   Serial.println(msg);
+  //   if(strcmp(msg,"BREAK_LIGHTS_ON")==0){
+  //     breakLights = true;
+  //   }
+  //   if(strcmp(msg,"BREAK_LIGHTS_OFF")==0){
+  //     breakLights = false;
+  //   }
+  //   if(strcmp(msg,"HEAD_LIGHTS_ON")==0){
+  //     digitalWrite(21, HIGH);
+  //     digitalWrite(20, HIGH);
+  //   }
+  //   if(strcmp(msg,"HEAD_LIGHTS_OFF")==0){
+  //     digitalWrite(21, LOW);
+  //     digitalWrite(20, LOW);
+  //   }
   }
 }
