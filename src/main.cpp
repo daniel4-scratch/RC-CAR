@@ -2,14 +2,6 @@
 #include <Wire.h>
 #include <ESP32Servo.h>
 
-// WiFi
-#include <WiFi.h>
-#include <WiFiUdp.h>
-const char* ssid = "RC-CAR";
-const char* password = "123bingus";
-WiFiUDP udp;
-unsigned int port = 4210;
-
 #define LED_PIN LED_BUILTIN
 #define THROTTLE_PIN 5
 #define THROTTLE_FORWARD 4
@@ -80,16 +72,6 @@ void setup() {
   throttleOut.writeMicroseconds(lastThrottleUs);
   steeringOut.writeMicroseconds(lastSteeringUs);
 
-  // // init wifi and udp
-  // WiFi.softAP(ssid, password);
-  // // Disable WiFi power save to reduce RF subsystem timing perturbations that can jitter servo timing
-  // WiFi.setSleep(false);
-  // Serial.print("IP address: ");
-  // Serial.println(WiFi.softAPIP());
-  // udp.begin(port);
-  // Serial.print("UDP Port: ");
-  // Serial.println(port);
-
   // Attach interrupts for non-blocking pulse measurement
   attachInterrupt(THROTTLE_PIN, throttleISR, CHANGE);
   attachInterrupt(STEERING_PIN, steeringISR, CHANGE);
@@ -140,28 +122,4 @@ void loop() {
     ledState = !ledState;
     digitalWrite(LED_PIN, ledState);
   }
-
-  // // WiFi
-  // int packetSize = udp.parsePacket();
-  // if (packetSize){
-  //   char msg[20];
-  //   int len = udp.read(msg,20);
-  //   if (len > 0) msg[len] = 0;
-  //   Serial.print("Received: ");
-  //   Serial.println(msg);
-  //   if(strcmp(msg,"BREAK_LIGHTS_ON")==0){
-  //     breakLights = true;
-  //   }
-  //   if(strcmp(msg,"BREAK_LIGHTS_OFF")==0){
-  //     breakLights = false;
-  //   }
-  //   if(strcmp(msg,"HEAD_LIGHTS_ON")==0){
-  //     digitalWrite(21, HIGH);
-  //     digitalWrite(20, HIGH);
-  //   }
-  //   if(strcmp(msg,"HEAD_LIGHTS_OFF")==0){
-  //     digitalWrite(21, LOW);
-  //     digitalWrite(20, LOW);
-  //   }
-  // }
 }
